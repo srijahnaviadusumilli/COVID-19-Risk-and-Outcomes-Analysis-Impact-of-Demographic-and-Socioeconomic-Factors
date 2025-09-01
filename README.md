@@ -32,7 +32,7 @@ Confidence Interval: 97.13% to 99.36% for logistic model reliability
 
 ## Files in the Repository
 
-- **covid19-analysis-.Rmd-**: R Markdown file containing complete statistical analysis pipeline.
+- **covid19-analysis.Rmd-**: R Markdown file containing complete statistical analysis pipeline.
 - **covid19-analysis-report.pdf-**: Full research report with methodology, results, and policy implications.
 - **covid19-analysis-presentation.pptx-**: Slide deck summarizing key findings, methodology, and clinical relevance.
   
