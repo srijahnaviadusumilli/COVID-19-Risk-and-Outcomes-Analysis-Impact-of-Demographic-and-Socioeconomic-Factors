@@ -1,0 +1,745 @@
+---
+title: "Untitled"
+output: pdf_document
+date: "2024-12-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# Loading the dataset
+data <- read.csv("/Users/jahnaviadusumilli/Downloads/archive-2/covid_data_log_200908.csv")
+View(data)
+```
+```{r}
+library(caret)
+library(pheatmap)
+```
+
+
+```{r}
+print(data)
+```
+
+
+```{r}
+colSums(is.na(data))
+```
+
+
+```{r}
+str(data)
+```
+
+```{r}
+summary(data[, !names(data) %in% c("County", "State", "Risk_Cat")])
+```
+
+```{r}
+table(data$State)
+```
+
+```{r}
+table(data$Risk_Cat)
+```
+
+
+
+```{r}
+numeric_columns <- data[sapply(data, is.numeric)]
+
+# Apply the sd function to each numeric column
+standard_deviations <- sapply(numeric_columns, sd)
+
+# Print the standard deviations
+standard_deviations
+```
+
+
+```{r}
+data_dropped <- data[, !names(data) %in% c("FIPS", "stateFIPS", "countyFIPS_2d")]
+print(data_dropped)
+```
+
+
+```{r}
+data <- data_dropped
+
+# Print the updated data
+print(data)
+```
+
+
+```{r}
+# Identify independent variables (excluding 'Cases' and 'Deaths')
+independent_columns <- setdiff(names(data), c("Cases", "Deaths"))
+
+# Select numeric columns for independent variables
+independent_numeric_columns <- sapply(data[independent_columns], is.numeric)
+
+# Apply IQR method to detect outliers in independent variables
+detect_outliers_iqr <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR_value <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR_value
+  upper_bound <- Q3 + 1.5 * IQR_value
+  outliers <- which(x < lower_bound | x > upper_bound)
+  return(outliers)
+}
+
+# Apply IQR method to all independent numeric columns
+outliers_iqr <- lapply(data[, independent_columns][, independent_numeric_columns], detect_outliers_iqr)
+
+# Display indices of outliers for each independent variable
+outliers_iqr
+```
+
+
+
+```{r}
+summary(data)
+```
+
+
+
+
+```{r}
+# Create boxplots for each independent numeric column to visualize outliers
+for (col in names(data[independent_columns])[independent_numeric_columns]) {
+  boxplot(data[[col]], main = paste("Boxplot of", col), col = "lightblue", border = "blue")
+}
+
+```
+
+
+
+
+```{r}
+# Remove outliers from independent variables based on the IQR method
+data_cleaned <- data
+
+for (col in names(data[independent_columns])[independent_numeric_columns]) {
+  Q1 <- quantile(data_cleaned[[col]], 0.25, na.rm = TRUE)
+  Q3 <- quantile(data_cleaned[[col]], 0.75, na.rm = TRUE)
+  IQR_value <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR_value
+  upper_bound <- Q3 + 1.5 * IQR_value
+  data_cleaned <- data_cleaned[data_cleaned[[col]] >= lower_bound & data_cleaned[[col]] <= upper_bound, ]
+}
+
+# View the cleaned data
+head(data_cleaned)
+```
+
+```{r}
+# Create boxplots for each independent numeric column to visualize if any outliers remianed
+for (col in names(data_cleaned[independent_columns])[independent_numeric_columns]) {
+  boxplot(data_cleaned[[col]], main = paste("Boxplot of", col), col = "lightblue", border = "blue")
+}
+
+```
+
+```{r}
+# Identify numeric columns in the dataset
+numeric_columns <- sapply(data_cleaned, is.numeric)
+
+# Initialize a list to store Shapiro-Wilk test results (p-values)
+shapiro_results <- list()
+
+# Loop through each numeric column and perform the Shapiro-Wilk test
+for (col in names(data_cleaned)[numeric_columns]) {
+  
+  # Extract the column data and remove missing values
+  column_data <- na.omit(data_cleaned[[col]])
+  
+  # Perform Shapiro-Wilk test only if the column has fewer than 5000 observations
+  if (length(column_data) < 5000) {
+    shapiro_test_result <- shapiro.test(column_data)
+    shapiro_results[[col]] <- shapiro_test_result$p.value
+  } else {
+    # If the column exceeds 5000 rows, skip and assign NA
+    shapiro_results[[col]] <- NA
+    message(paste("Column", col, "skipped due to row limit (> 5000)."))
+  }
+}
+
+# Print the results: p-values for each numeric column
+shapiro_results
+
+```
+
+
+```{r}
+View(data)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+```
+
+
+```{r}
+## Histogram for Cases=
+ggplot(data, aes(x = `Cases`)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of COVID-19 Cases", x = "Cases", y = "Count") +
+  theme_minimal()
+
+```
+
+```{r}
+## Histogram for Deaths=
+ggplot(data, aes(x = Deaths)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  labs(title = "Distribution of COVID-19 Deaths", x = "Deaths", y = "Count") +
+  theme_minimal()
+```
+
+
+## Bar Chart for Risk Categories
+```{r}
+ggplot(data, aes(x = Risk_Cat)) +
+  geom_bar(fill = "darkorange") +
+  labs(title = "Proportion of Risk Categories", x = "Risk Category", y = "Count") +
+  theme_minimal()
+```
+
+```{r}
+## Scatter Plot: Poverty vs. Cases
+ggplot(data, aes(x = Poverty, y = Cases)) +
+  geom_point(color = "blue") +
+  labs(title = "Poverty vs COVID-19 Cases", x = "Poverty Rate", y = "Cases") +
+  theme_minimal()
+```
+
+## Scatter Plot: Population vs. Deaths
+```{r}
+ggplot(data, aes(x = Population, y = Deaths)) +
+  geom_point(color = "red") +
+  labs(title = "Population vs COVID-19 Deaths", x = "Population", y = "Deaths") +
+  theme_minimal()
+```
+
+## Bar Charts for Demographic Variables
+```{r}
+# White Male
+ggplot(data, aes(x = State, y = W_Male)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "White Male Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# White Female
+ggplot(data, aes(x = State, y = W_Female)) +
+  geom_bar(stat = "identity", fill = "pink") +
+  labs(title = "White Female Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Black Male
+ggplot(data, aes(x = State, y = B_Male)) +
+  geom_bar(stat = "identity", fill = "green") +
+  labs(title = "Black Male Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Black Female
+ggplot(data, aes(x = State, y = B_Female)) +
+  geom_bar(stat = "identity", fill = "yellow") +
+  labs(title = "Black Female Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Indian Male
+ggplot(data, aes(x = State, y = I_Male)) +
+  geom_bar(stat = "identity", fill = "orange") +
+  labs(title = "Indian Male Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Indian Female
+ggplot(data, aes(x = State, y = I_Female)) +
+  geom_bar(stat = "identity", fill = "red") +
+  labs(title = "Indian Female Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Asian Male
+ggplot(data, aes(x = State, y = A_Male)) +
+  geom_bar(stat = "identity", fill = "brown") +
+  labs(title = "Asian Male Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Asian Female
+ggplot(data, aes(x = State, y = A_Female)) +
+  geom_bar(stat = "identity", fill = "violet") +
+  labs(title = "Asian Female Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Native Hawaiian Male
+ggplot(data, aes(x = State, y = NH_Male)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Native Hawaiian Male Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Native Hawaiian Female
+ggplot(data, aes(x = State, y = NH_Female)) +
+  geom_bar(stat = "identity", fill = "black") +
+  labs(title = "Native Hawaiian Female Population by State", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+
+```{r}
+
+ggplot(data, aes(x = State, y = Poverty)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Poverty across various states", x = "State", y = "Poverty") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+
+```{r}
+
+
+ggplot(data, aes(x = State, y = Population)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Population across various states", x = "State", y = "Population") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+
+
+
+
+
+```{r}
+# Load required libraries
+library(ggplot2)
+
+# Calculate the frequency of each state
+state_counts <- as.data.frame(table(data$State))
+
+# Rename columns for clarity
+colnames(state_counts) <- c("State", "Count")
+
+# Create a pie chart
+ggplot(state_counts, aes(x = "", y = Count, fill = State)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  labs(title = "Distribution of States", x = NULL, y = NULL) +
+  theme_void() +
+  theme(legend.title = element_text(size = 10), legend.text = element_text(size = 8))
+
+```
+
+
+
+```{r}
+ggplot(data, aes(x = Poverty)) +
+  geom_histogram(binwidth = 1, fill = "purple", color = "black") +
+  labs(title = "Distribution of Poverty Rates", x = "Poverty Rate (%)", y = "Count") +
+  theme_minimal()
+
+```
+```{r}
+ggplot(data, aes(x = Population, y = Poverty)) +
+  geom_point(color = "blue", alpha = 0.7) +
+  labs(title = "Population vs Poverty Rate", x = "Population", y = "Poverty Rate (%)") +
+  theme_minimal()
+
+```
+
+
+```{r}
+# Perform Kruskal-Wallis test for Cases across Risk Categories
+kruskal_cases <- kruskal.test(Cases ~ Risk_Cat, data = data)
+kruskal_cases
+
+# Perform Kruskal-Wallis test for Poverty across Risk Categories
+kruskal_poverty <- kruskal.test(Poverty ~ Risk_Cat, data = data)
+kruskal_poverty
+
+# Perform Kruskal-Wallis test for Deaths across Risk Categories
+kruskal_deaths <- kruskal.test(Deaths ~ Risk_Cat, data = data)
+kruskal_deaths
+```
+
+
+
+```{r}
+chi_square_test_state <- chisq.test(table(data$Risk_Cat, data$State))
+chi_square_test_county <- chisq.test(table(data$Risk_Cat, data$County))
+chi_square_test_state 
+chi_square_test_county
+```
+
+
+```{r}
+# Perform Spearman correlation for Population and State
+spearman_pop_state <- cor.test(data$Population, as.numeric(as.factor(data$State)), method = "spearman")
+spearman_pop_state 
+# Perform Spearman correlation for Population and Cases
+spearman_pop_cases <- cor.test(data$Population, data$Cases, method = "spearman")
+spearman_pop_cases
+# Perform Spearman correlation for Population and Deaths
+spearman_pop_deaths <- cor.test(data$Population, data$Deaths, method = "spearman")
+spearman_pop_deaths
+# Perform Spearman correlation for Poverty and Cases
+spearman_poverty_cases <- cor.test(data$Poverty, data$Cases, method = "spearman")
+spearman_poverty_cases
+# Perform Spearman correlation for Poverty and Deaths
+spearman_poverty_deaths <- cor.test(data$Poverty, data$Deaths, method = "spearman")
+spearman_poverty_deaths
+```
+
+
+```{r}
+# Convert columns to numeric if necessary
+data$Poverty_column <- as.numeric(data$Poverty)
+data$Population_column <- as.numeric(data$Population)
+
+# Calculate Spearman's rank correlation
+spearman_corr <- cor(data$Poverty_column, data$Population_column, method = "spearman", use = "complete.obs")
+print(paste("Spearman's Rank Correlation:", spearman_corr))
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+##BOX PLOT BEFORE OUTLIERS
+# Identify numeric (continuous) variables automatically
+continuous_vars <- data %>%
+  select_if(is.numeric)
+
+# View the column names of continuous variables
+colnames(continuous_vars)
+
+# Select only numeric continuous columns
+continuous_vars <- data %>%
+  select(Cases, Deaths, Poverty, Population, 
+         W_Male, W_Female, B_Male, B_Female, 
+         I_Male, I_Female, A_Male, A_Female, 
+         NH_Male, NH_Female)
+
+# Reshape data to long format
+continuous_long <- continuous_vars %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+
+# Plot boxplots for each continuous variable
+ggplot(continuous_long, aes(x = Variable, y = Value)) +
+  geom_boxplot(fill = "steelblue", color = "black", outlier.color = "red", outlier.shape = 16) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Boxplots of Continuous Variables", x = "Variables", y = "Values")
+```
+
+
+
+
+```{r}
+# Identify continuous variables (numeric columns)
+continuous_vars <- data %>% 
+  select_if(is.numeric)
+
+# Function to remove outliers using the IQR method
+remove_outliers <- function(data, column) {
+  Q1 <- quantile(data[[column]], 0.25, na.rm = TRUE)  # 1st Quartile
+  Q3 <- quantile(data[[column]], 0.75, na.rm = TRUE)  # 3rd Quartile
+  IQR <- Q3 - Q1  # Interquartile Range
+  
+  # Define lower and upper bounds
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  # Filter data to exclude outliers
+  data <- data %>%
+    filter(data[[column]] >= lower_bound & data[[column]] <= upper_bound)
+  return(data)
+}
+
+# Create a copy of the original dataset
+filtered_data <- data
+
+# Loop through each continuous variable and remove outliers
+for (col in colnames(continuous_vars)) {
+  filtered_data <- remove_outliers(filtered_data, col)
+}
+
+# View the filtered dataset
+print(filtered_data)
+
+# Check the number of rows before and after outlier removal
+cat("Original rows:", nrow(data), "\n")    #3142 
+cat("Filtered rows:", nrow(filtered_data), "\n") #2740 
+```
+
+
+```{r}
+##BOX PLOT AFTER OUTLIER REMOVAL USING IQR method
+# Identify numeric (continuous) variables automatically
+filtered_continuous_vars <- filtered_data %>%
+  select_if(is.numeric)
+
+# View the column names of continuous variables
+colnames(filtered_continuous_vars)
+
+# Select only numeric continuous columns 
+filtered_continuous_vars <- filtered_data %>% 
+  select(Cases, Deaths, Poverty, Population, 
+         W_Male, W_Female, B_Male, B_Female, 
+         I_Male, I_Female, A_Male, A_Female, 
+         NH_Male, NH_Female)
+
+# Reshape data to long format
+filtered_continuous_long <- filtered_continuous_vars %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Value")
+
+# Plot boxplots for each continuous variable
+ggplot(filtered_continuous_long, aes(x = Variable, y = Value)) +
+  geom_boxplot(fill = "steelblue", color = "black", outlier.color = "red", outlier.shape = 16) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Boxplots of filtered Continuous Variables", x = "Variables", y = "Values")
+```
+
+
+
+```{r}
+##REGRESSION MODEL-1: Cases as the dependent variable.
+#Correlation check
+filtered_continuous_vars <- filtered_data %>% 
+  select(Cases, Poverty, Population, 
+         W_Male, W_Female, B_Male, B_Female, 
+         I_Male, I_Female, A_Male, A_Female, 
+         NH_Male, NH_Female)
+
+# Calculate Correlation Matrix
+cor_matrix <- cor(filtered_continuous_vars, use = "complete.obs")
+
+# Print the correlation matrix
+print(cor_matrix)
+
+# Step 3: Define custom breaks for the color gradient
+breaks <- c(-1, -0.55, 0, 0.75, 0.85, 1)
+
+# Create custom color palette
+custom_colors <- colorRampPalette(c("white", "darkblue", "blue", "red", "darkred"))(length(breaks) - 1)
+
+# Step 4: Visualize Correlation Matrix as a Heatmap
+pheatmap(cor_matrix, 
+         color = custom_colors, 
+         breaks = breaks,  
+         main = "Correlation Heatmap before correction",
+         display_numbers = FALSE, 
+         fontsize_number = 8)
+
+#CORRECTION OF CORRELATION: Aggregate racial populations
+Aggregated_filtered_data <- filtered_data %>%
+  mutate(
+    W_Total = W_Male + W_Female,  # White total population
+    B_Total = B_Male + B_Female,  # Black total population
+    A_Total = A_Male + A_Female,  # Asian total population
+    I_Total = I_Male + I_Female,  # American Indian total population
+    NH_Total = NH_Male + NH_Female # Native Hawaiian total population
+  )
+
+# View the first few rows to verify the aggregation
+head(Aggregated_filtered_data)
+
+#Select relevant continuous variables for correlation analysis**
+# We exclude W_Male, W_Female, B_Male, B_Female, etc., since we now have aggregated totals
+##model_1, predicting cases
+correlation_vars <- Aggregated_filtered_data %>%
+  select(Poverty, Deaths, Risk_Index,
+         W_Total, B_Total, A_Total, I_Total, 
+         NH_Total)
+
+# **Step 3: Compute correlation matrix**
+cor_matrix <- cor(correlation_vars, use = "complete.obs")
+
+# Print the correlation matrix to view the results
+print(cor_matrix)
+
+# Step 3: Define custom breaks for the color gradient
+breaks <- c(-1, -0.55, 0, 0.75, 0.85, 1)
+
+# Create custom color palette
+custom_colors <- colorRampPalette(c("white", "darkblue", "blue", "red", "darkred"))(length(breaks) - 1)
+
+# Step 4: Visualize Correlation Matrix as a Heatmap
+pheatmap(cor_matrix, 
+         color = custom_colors, 
+         breaks = breaks,  
+         main = "Custom Correlation Heatmap",
+         display_numbers = FALSE, 
+         fontsize_number = 8)
+```
+
+
+
+
+```{r}
+#Regression Model (Cases as Dependent Variable)
+# Define the independent variables and dependent variable
+regression_vars <- Aggregated_filtered_data %>%
+  select(Deaths, 
+         Poverty, Cases, Risk_Index, 
+         W_Total, B_Total, A_Total, I_Total, 
+         NH_Total)
+
+# Fit the linear regression model
+regression_model <- lm(Deaths ~ Poverty + Cases + Risk_Index + 
+                         W_Total + B_Total + A_Total + I_Total + NH_Total, 
+                       data = Aggregated_filtered_data)
+
+# View the model summary
+summary(regression_model)
+
+##Diagnostics and Assumption Checks
+# 1. Residuals vs Fitted Plot
+ggplot(data.frame(Fitted = fitted(regression_model), Residuals = residuals(regression_model)), 
+       aes(x = Fitted, y = Residuals)) +
+  geom_point(color = "black", alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs Fitted Plot", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+# 2. Q-Q Plot to check normality of residuals
+qqnorm(residuals(regression_model))
+qqline(residuals(regression_model), col = "red")
+
+# 3. Scale-Location Plot
+ggplot(data.frame(Fitted = fitted(regression_model), 
+                  Scaled = sqrt(abs(residuals(regression_model)))), 
+       aes(x = Fitted, y = Scaled)) +
+  geom_point(color = "black", alpha = 0.6) +
+  geom_smooth(se = FALSE, color = "red") +
+  labs(title = "Scale-Location Plot", x = "Fitted Values", y = "√|Residuals|") +
+  theme_minimal()
+
+# 4. Residuals vs Leverage
+leverage <- hatvalues(regression_model)
+cook <- cooks.distance(regression_model)
+
+ggplot(data.frame(Leverage = leverage, Residuals = residuals(regression_model), Cook = cook),
+       aes(x = Leverage, y = Residuals, size = Cook)) +
+  geom_point(color = "black", alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs Leverage", x = "Leverage", y = "Residuals") +
+  theme_minimal()
+
+## Evaluate Model Performance
+# Calculate Root Mean Squared Error (RMSE)
+predicted_values <- predict(regression_model, Aggregated_filtered_data)
+rmse <- sqrt(mean((Aggregated_filtered_data$Cases - predicted_values)^2))
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+# Calculate R-squared and Adjusted R-squared
+rsq <- summary(regression_model)$r.squared
+adj_rsq <- summary(regression_model)$adj.r.squared
+cat("R-squared:", rsq, "\n")
+cat("Adjusted R-squared:", adj_rsq, "\n")
+```
+
+
+
+```{r}
+##CLASSIFICATION MODEL-3: Risk Category (Risk_Cat) as the dependent variable
+
+
+## Load Required Libraries
+library(dplyr)
+library(ggplot2)
+library(caret)  # For train/test split, confusion matrix
+library(nnet)   # For multinomial logistic regression (if needed)
+library(pROC)   # For ROC curve
+
+
+## Step 1: Aggregate Racial Populations
+Aggregated_filtered_data <- filtered_data %>%
+  mutate(
+    W_Total = W_Male + W_Female,  # White total population
+    B_Total = B_Male + B_Female,  # Black total population
+    A_Total = A_Male + A_Female,  # Asian total population
+    I_Total = I_Male + I_Female,  # American Indian total population
+    NH_Total = NH_Male + NH_Female # Native Hawaiian total population
+  )
+
+# Remove old disaggregated racial population columns
+Aggregated_filtered_data <- Aggregated_filtered_data %>%
+  select(-W_Male, -W_Female, -B_Male, -B_Female, 
+         -A_Male, -A_Female, -I_Male, -I_Female, 
+         -NH_Male, -NH_Female)
+
+# Ensure Risk_Cat is a factor (since it is a classification target)
+Aggregated_filtered_data$Risk_Cat <- as.factor(Aggregated_filtered_data$Risk_Cat)
+
+# View the first few rows to verify
+head(Aggregated_filtered_data)
+
+
+## Step 2: Split the Data into Training and Testing Sets (80-20 split)
+set.seed(123)  # For reproducibility
+train_index <- createDataPartition(Aggregated_filtered_data$Risk_Cat, p = 0.8, list = FALSE)
+train_data <- Aggregated_filtered_data[train_index, ]
+test_data <- Aggregated_filtered_data[-train_index, ]
+
+# Check the distribution of Risk_Cat in train and test
+table(train_data$Risk_Cat)
+table(test_data$Risk_Cat)
+
+## Step 3: Fit the Classification Model (Logistic Regression or Multinomial Logistic Regression)
+# If binary classification (e.g., "Low" vs "High"), use glm()
+if (length(unique(Aggregated_filtered_data$Risk_Cat)) == 2) {
+  logistic_model <- glm(Risk_Cat ~ Poverty + Cases + Deaths + Risk_Index + 
+                          W_Total + B_Total + A_Total + I_Total + NH_Total, 
+                        data = train_data, family = binomial(link = "logit"))
+} else {
+  # Multinomial logistic regression for multi-class classification
+  multinomial_model <- multinom(Risk_Cat ~ Poverty + Cases + Deaths + Risk_Index + 
+                                  W_Total + B_Total + A_Total + I_Total + NH_Total, 
+                                data = train_data)
+}
+
+# View model summary
+if (exists("logistic_model")) {
+  summary(logistic_model)
+} else {
+  summary(multinomial_model)
+}
+
+
+## Step 4: Make Predictions
+# Predict on the test data
+if (exists("logistic_model")) {
+  predictions <- predict(logistic_model, test_data, type = "response")
+  predicted_classes <- ifelse(predictions > 0.5, 1, 0)  # Convert probabilities to binary predictions
+} else {
+  predicted_classes <- predict(multinomial_model, test_data)
+}
+
+
+## Step 5: Evaluate the Model
+# Confusion Matrix
+confusion_matrix <- confusionMatrix(factor(predicted_classes), test_data$Risk_Cat)
+print(confusion_matrix)
+
+# Calculate accuracy
+accuracy <- confusion_matrix$overall['Accuracy']
+cat("Accuracy of the Classification Model:", accuracy, "\n")
+
+```
+
+
+
+
+
+
